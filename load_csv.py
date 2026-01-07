@@ -3,6 +3,27 @@ import pandas as pd
 import math
 import matplotlib.pyplot as plt
 
+
+# Его суть такова. Если индекс чистых цен средних ОФЗ (RUGBICP3Y) за последние 3 месяца показал 
+# положительную доходность, то берем дальние ОФЗ (индекс RUGBITR10Y). 
+# Если отрицательную - то перекладываемся в самые ближние бумаги (индекс RUGBITR1Y).
+
+# Проведем такой же фокус с корпоративными облигациями. 
+# В качестве дальних возьмем индекс RUCBTR5YNS, а в качестве ближних RUCBITR1Y. 
+# Что касается индекса чистых цен средних облигаций, 
+# то здесь попробуем две опции: 
+# 1) ориентироваться на RUCBCP3YNS; 
+# 2) вместо корпоративных смотреть на динамику ОФЗ RUGBICP3Y.
+
+# С апреля 2019 по ноябрь 2025 такой моментум на корпоративных бондах принес 111,6%, 
+# если ориентироваться на RUCBCP3YNS, и 132,2%, 
+# если ориентироваться RUGBICP3Y. 
+# Индекс корпоративных облигаций RUCBTRNS вырос на 80,6%. 
+# Издержки здесь не учтены. 
+# Но перекладываний из дальних в ближнее было очень немного, 
+# а бид-аск спреды в облигациях из названных выше индексов, в отличие от ВДО, незначительны.
+
+
 def load_csv_to_dataframe(file_path):
     """
     Loads a CSV file into a pandas DataFrame.
@@ -40,7 +61,7 @@ def simulate(df: pd.DataFrame, initial_investment=100000) -> tuple[float, int]:
     invest = initial_investment
     roatations: int = 0
     for index, row in df.iterrows():
-        print(f"Date: {index}, Row Data: {row['state']} {invest}")
+        #print(f"Date: {index}, Row Data: {row['state']} {invest}")
         if state is None:
             position = invest / row['RUGBITR1Y.INDX']
             state = '1Y'   
@@ -86,13 +107,28 @@ def truncate_df(df, from_date, to_date):
     return df.loc[from_date:to_date]
 
 def plot_df(df):
-    df[['RUGBITR1Y_norm', 'RUGBITR10Y_norm','strategy_norm']].plot()
-    plt.title('RUGBITR Indices Over Time')
+    fig, ax = plt.subplots()
+    ax.plot(df.index, df['RUGBITR1Y_norm'], color='blue', label='RUGBITR1Y_norm')
+    ax.plot(df.index, df['RUGBITR10Y_norm'], color='orange', label='RUGBITR10Y_norm')
+    current_color = 'black' if df['state'].iloc[0] == '10Y' else 'lightgreen'
+    start_idx = 0
+    strategy_label_added = False
+    for i in range(1, len(df)):
+        if df['state'].iloc[i] != df['state'].iloc[i-1]:
+            label = 'Strategy' if not strategy_label_added else None
+            ax.plot(df.index[start_idx:i], df['strategy_norm'].iloc[start_idx:i], color=current_color, label=label)
+            if label:
+                strategy_label_added = True
+            current_color = 'lightgreen' if df['state'].iloc[i] == '1Y' else 'black'
+            start_idx = i
+    label = 'Strategy' if not strategy_label_added else None
+    ax.plot(df.index[start_idx:], df['strategy_norm'].iloc[start_idx:], color=current_color, label=label)
+    plt.title('Normalized Indices and Strategy Over Time')
     plt.xlabel('Date')
-    plt.ylabel('Value')
+    plt.ylabel('Normalized Value')
     plt.legend()
     plt.savefig('plot.png')
-    print("Plot saved as plot.png")
+    
 
 def normalize_columns(df):
     df['RUGBITR1Y_norm'] = df['RUGBITR1Y.INDX'] / df['RUGBITR1Y.INDX'].iloc[0] * 100
